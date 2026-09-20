@@ -6,7 +6,13 @@ Rivalis é um jogo de dedução social para jogar pelo celular, reunido com os a
 
 Inspirado em *The Resistance*, jogado no navegador. Um aparelho é o **mestre** e cada jogador entra pelo **próprio celular**. As escolhas vão para o mestre, e o resultado volta para todos em tempo real.
 
-Tudo fica em um único arquivo, o `index.html`. Não tem servidor próprio, instalação ou build.
+Não tem servidor próprio, instalação ou build. São três arquivos:
+
+| Arquivo | O que é |
+|---|---|
+| `index.html` | O jogo (mestre + jogadores) |
+| `avatar.js` | Gerador dos rostos em SVG |
+| `avatar.html` | Editor de personagem avulso, para testar as peças |
 
 ---
 
@@ -21,6 +27,14 @@ Tudo fica em um único arquivo, o `index.html`. Não tem servidor próprio, inst
   3. Quem está na equipe joga em segredo **Sucesso** ou **Sabotar**. Só espiões podem sabotar.
   4. O mestre **revela** as cartas embaralhadas. Uma sabotagem basta para a missão falhar. Com 7 ou mais jogadores, a 4ª missão só falha com 2 sabotagens.
 - Vence quem chegar primeiro a **3 missões**.
+
+### Personagem
+
+Antes de entrar na sala, cada jogador monta o próprio personagem: **rosto, pele, cabelo, cor do cabelo, olhos, cor dos olhos, sobrancelhas, boca e cicatriz** (incluindo tapa-olho). Dá para sortear ou escolher peça por peça, e ainda dá para trocar no lobby, antes da partida começar.
+
+O rosto aparece na lista do mestre, no lobby, na equipe da missão, na conversa e na revelação final. O personagem fica salvo no aparelho e vira um código curto de texto (`3-2-4-3-1-0-4-2-5`), que é o que trafega entre os aparelhos.
+
+`avatar.html` é o mesmo editor em página separada, útil para criar peças novas sem abrir o jogo.
 
 ### Conversa com textos prontos
 
@@ -104,6 +118,7 @@ python3 -m http.server 8000
 - **Conexão:** usa [PeerJS](https://peerjs.com/) (WebRTC). Os celulares se conectam direto ao aparelho do mestre. O servidor público gratuito do PeerJS só é usado para os aparelhos se encontrarem, e os dados do jogo não passam por ele.
 - **Autoridade:** o **mestre é o servidor**. Ele guarda o estado, sorteia os papéis, valida as ações e manda a cada jogador só o que ele pode ver. Os papéis dos outros, por exemplo, nunca chegam ao celular de ninguém antes do fim.
 - **Reconexão:** se um jogador cair, recarregar ou trocar de aparelho, volta para o mesmo lugar. Para isso ele entra com o mesmo nome. O mestre também pode recarregar a página, porque o estado fica salvo no `localStorage` dele.
+- **Personagem:** `avatar.js` desenha tudo em SVG, sem imagens. `Avatar.svg(cfg)` devolve o rosto, `Avatar.code(cfg)` vira texto e `Avatar.fromString(nome)` dá um rosto fixo a partir do nome. Se o arquivo faltar, o jogo roda igual, só sem os rostos.
 - **Bibliotecas embutidas:** PeerJS 1.5.4 e qrcode-generator 1.4.4 (ambas com licença MIT) estão dentro do HTML, então o jogo não depende de CDN.
 
 ### Onde mexer no código
@@ -118,6 +133,7 @@ Tudo fica no `<script>` principal do `index.html`:
 | Regras de votação e missão | `hostOnMsg`, `resolveVote` e `hostAct` |
 | Telas | `renderStart`, `renderHost` e `renderPlayer` |
 | Cores e visual | variáveis CSS em `:root` |
+| Peças do personagem | `avatar.js`: listas `FACE`, `HAIR`, `EYES`, `BROWS`, `MOUTH`, `SCAR` e as paletas `SKIN`, `HAIRC`, `EYEC`. Uma peça nova entra na lista e já aparece no editor |
 
 ### Limitações conhecidas
 
