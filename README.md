@@ -1,6 +1,10 @@
-# Resistência
+# Rivalis
 
-Jogo de dedução social no estilo *The Resistance*, jogado no navegador. Um aparelho é o **mestre** e cada jogador entra pelo **próprio celular**. As escolhas vão para o mestre, e o resultado volta para todos em tempo real.
+**Confie. Acuse. Traia.**
+
+Rivalis é um jogo de dedução social para jogar pelo celular, reunido com os amigos. A maioria é da **Resistência** e precisa cumprir missões. Entre eles estão **espiões infiltrados**, que tentam sabotar tudo sem serem descobertos. Ninguém sabe em quem confiar. Na conversa com frases prontas, os jogadores acusam, defendem e fazem alianças que podem ser quebradas na hora da votação.
+
+Inspirado em *The Resistance*, jogado no navegador. Um aparelho é o **mestre** e cada jogador entra pelo **próprio celular**. As escolhas vão para o mestre, e o resultado volta para todos em tempo real.
 
 Tudo fica em um único arquivo, o `index.html`. Não tem servidor próprio, instalação ou build.
 
