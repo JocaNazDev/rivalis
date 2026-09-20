@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12141a">
+<title>Rivalis · Cenas</title>
+<style>
+:root{--bg:#12141a;--panel:#1b1e27;--panel2:#232735;--line:#2f3445;--text:#e9ebf2;--mute:#9aa1b5;--res:#3b82f6;--gold:#eab308;--ok:#22c55e;--r:14px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#app{max-width:900px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:0 0 4px} h3{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px}
+p{margin:6px 0} .mute{color:var(--mute)} .small{font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:9px 13px;cursor:pointer;min-height:42px}
+button.chip{padding:7px 12px;min-height:36px;border-radius:999px;font-size:14px}
+button.chip.on{background:var(--res);border-color:var(--res);font-weight:700}
+button.primary{background:var(--res);border-color:var(--res);font-weight:700}
+textarea{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;resize:vertical}
+textarea:focus{outline:2px solid var(--res);outline-offset:1px}
+label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
+.frame{border-radius:12px;overflow:hidden;line-height:0;border:1px solid var(--line);background:#000}
+.frame svg{width:100%;height:auto;display:block}
+code{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px 7px;font-size:12px;word-break:break-all}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.gal .cap{font-size:12px;color:var(--mute);padding:6px 2px 0}
+.tag{display:inline-block;background:#2b3a55;border:1px solid #3b5279;color:#cfe0ff;border-radius:999px;padding:2px 9px;font-size:12px;margin:2px 4px 2px 0}
+.tag.off{background:var(--panel2);border-color:var(--line);color:var(--mute)}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Gerador de cenas</h1>
+  <p class="mute small">Teste separado do jogo. Escreva a descrição da missão e veja o que sai. Nada aqui está ligado ao Rivalis ainda.</p>
+
+  <div class="card">
+    <div class="frame" id="preview"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="sortear">🎲 Sortear cena</button>
+      <button id="novaSemente">↻ Outra variação</button>
+      <span class="small mute">Código: <code id="codigo"></code></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="txt">Descrição da missão (como o mestre escreveria)</label>
+    <textarea id="txt" rows="3" placeholder="Entramos na gruta à noite, com tochas, e os goblins montam guarda perto da fogueira."></textarea>
+    <p class="small mute" id="lido"></p>
+  </div>
+
+  <div class="card">
+    <h3>Ajuste manual</h3>
+    <div style="margin-bottom:10px"><label>Cenário</label><div class="row" id="ctrlCena"></div></div>
+    <div style="margin-bottom:10px"><label>Hora</label><div class="row" id="ctrlHora"></div></div>
+    <div style="margin-bottom:10px"><label>Clima</label><div class="row" id="ctrlClima"></div></div>
+    <div><label>Elementos</label><div class="row" id="ctrlProps"></div></div>
+  </div>
+
+  <div class="card">
+    <h3>Todos os cenários</h3>
+    <div class="row" style="margin-bottom:10px" id="galHora"></div>
+    <div class="gal" id="galeria"></div>
+  </div>
+</div>
+
+<script src="cena.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let cfg = Cena.normalize({id:'gruta', time:'penumbra', weather:'limpo', props:['tochas'], seed:'42'});
+let galTime = 'noite';
+
+const EX = [
+  'Entramos na gruta à noite, com tochas, e os goblins montam guarda perto da fogueira.',
+  'A cela é úmida e escura, com caixotes empilhados num canto.',
+  'Dentro do carro, na estrada, de madrugada, com a luz de alerta no painel.',
+  'O corredor da estação está no escuro, alarme vermelho piscando e alguém se movendo ao fundo.',
+  'Floresta fechada ao entardecer, neblina entre as árvores.',
+  'Beco da cidade na chuva, com um vulto embaixo do poste.',
+  'A taverna cheia, com barris atrás do balcão.',
+  'O salão do trono com guardas nas colunas e tochas nas paredes.',
+];
+
+function draw(){
+  $('preview').innerHTML = Cena.svg(cfg, {w:880});
+  $('codigo').textContent = Cena.code(cfg);
+  ctrls();
+}
+function ctrls(){
+  $('ctrlCena').innerHTML = Object.entries(Cena.SCENES)
+    .map(([id,s])=>`<button class="chip ${cfg.id===id?'on':''}" data-k="id" data-v="${id}">${s.emoji} ${s.name}</button>`).join('');
+  $('ctrlHora').innerHTML = Object.entries(Cena.TIME)
+    .map(([id,t])=>`<button class="chip ${cfg.time===id?'on':''}" data-k="time" data-v="${id}">${t.name}</button>`).join('');
+  $('ctrlClima').innerHTML = Object.entries(Cena.WEATHER)
+    .map(([id,n])=>`<button class="chip ${cfg.weather===id?'on':''}" data-k="weather" data-v="${id}">${n}</button>`).join('');
+  $('ctrlProps').innerHTML = Object.entries(Cena.PROPS)
+    .map(([id,p])=>`<button class="chip ${cfg.props.includes(id)?'on':''}" data-k="prop" data-v="${id}">${p.name}</button>`).join('');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-k]'); if(!b) return;
+  const {k, v} = b.dataset;
+  if(k === 'prop') cfg.props = cfg.props.includes(v) ? cfg.props.filter(p=>p!==v) : cfg.props.concat(v);
+  else cfg[k] = v;
+  draw();
+});
+$('txt').addEventListener('input', e => {
+  const t = e.target.value;
+  if(!t.trim()){ $('lido').textContent = ''; return; }
+  const c = Cena.fromText(t, cfg.seed);
+  cfg = c;
+  const tags = [
+    `<span class="tag">${Cena.SCENES[c.id].emoji} ${Cena.SCENES[c.id].name}${c.matched?'':' (palpite)'}</span>`,
+    `<span class="tag">${Cena.TIME[c.time].name}</span>`,
+    `<span class="tag ${c.weather==='limpo'?'off':''}">${Cena.WEATHER[c.weather]}</span>`,
+    ...Object.keys(Cena.PROPS).map(p=>`<span class="tag ${c.props.includes(p)?'':'off'}">${Cena.PROPS[p].name}</span>`),
+  ].join('');
+  $('lido').innerHTML = 'O gerador entendeu: ' + tags + (c.matched ? '' : '<br><b>Nenhum cenário reconhecido nesse texto.</b> Escolha um na mão abaixo.');
+  draw();
+});
+$('sortear').onclick = () => { cfg = Cena.random(); $('txt').value=''; $('lido').textContent=''; draw(); };
+$('novaSemente').onclick = () => { cfg.seed = String(Math.floor(Math.random()*1e6)); draw(); };
+
+function galeria(){
+  $('galHora').innerHTML = Object.entries(Cena.TIME)
+    .map(([id,t])=>`<button class="chip ${galTime===id?'on':''}" data-g="${id}">${t.name}</button>`).join('');
+  $('galeria').innerHTML = Object.entries(Cena.SCENES).map(([id,s])=>`
+    <div><div class="frame">${Cena.svg({id, time:galTime, weather:'limpo', props:['figuras'], seed:'7'}, {w:420})}</div>
+    <div class="cap">${s.emoji} ${s.name}</div></div>`).join('');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-g]'); if(!b) return;
+  galTime = b.dataset.g; galeria();
+});
+$('txt').value = EX[Math.floor(Math.random()*EX.length)];
+$('txt').dispatchEvent(new Event('input'));
+galeria();
+</script>
+</body>
+</html>
