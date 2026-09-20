@@ -2485,7 +2485,7 @@ function hostNet(code, h){
   if(typeof Peer === 'undefined'){ setTimeout(()=>h.onError('Não foi possível carregar a conexão. Verifique a internet e recarregue.'),0); return {send(){},drop(){}}; }
   const conns = {}; let peer;
   const open = () => {
-    try{ peer = new Peer(PREFIX+code); }catch(e){ h.onError('Este navegador bloqueou a conexão. Abra o link do jogo direto no Safari ou Chrome.'); return; }
+    try{ peer = new Peer(PREFIX+code, PEER_OPTS); }catch(e){ h.onError('Este navegador bloqueou a conexão. Abra o link do jogo direto no Safari ou Chrome.'); return; }
     peer.on('open', () => h.onReady());
     peer.on('connection', c => {
       conns[c.connectionId] = c;
@@ -2506,6 +2506,13 @@ function hostNet(code, h){
   };
 }
 
+// Servidores para atravessar roteadores/4G (STUN) e retransmitir quando a ligação direta falha (TURN)
+const PEER_OPTS = { debug:1, config:{ iceServers:[
+  {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
+  {urls:'stun:stun.cloudflare.com:3478'},
+  {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'], username:'peerjs', credential:'peerjsp'},
+]}};
+
 function clientNet(code, h){
   if(LOCAL){
     const me = rid();
@@ -2516,24 +2523,48 @@ function clientNet(code, h){
     return { send(m){ bc.postMessage({to:'host', from:me, d:m}); } };
   }
   if(typeof Peer === 'undefined'){ setTimeout(()=>h.onStatus('nolib'),0); return {send(){}}; }
-  let peer, conn, timer = null;
-  const retry = () => { if(timer) return; h.onStatus('retry'); timer = setTimeout(()=>{ timer=null; start(); }, 2500); };
-  const start = () => {
+  let peer = null, conn = null, linkTimer = null, retryTimer = null, attempts = 0;
+  const log = t => h.onLog && h.onLog(t);
+  const later = (fn, ms) => { clearTimeout(retryTimer); retryTimer = setTimeout(fn, ms); };
+
+  // 1) registra este celular no servidor de salas
+  const startPeer = () => {
     try{ peer && peer.destroy(); }catch(e){}
-    conn = null;
-    try{ peer = new Peer(); }catch(e){ h.onStatus('nolib'); return; }
-    peer.on('open', () => {
-      conn = peer.connect(PREFIX+code, {reliable:true});
-      conn.on('open', () => h.onStatus('open'));
-      conn.on('data', m => h.onMsg(m));
-      conn.on('close', retry);
-      conn.on('error', retry);
+    conn = null; clearTimeout(linkTimer);
+    h.onStatus('server'); log('Conectando ao servidor de salas…');
+    try{ peer = new Peer(PEER_OPTS); }catch(e){ h.onStatus('nolib'); log('Erro ao criar conexão: '+e.message); return; }
+    peer.on('open', id => { log('Servidor OK.'); connectHost(); });
+    peer.on('disconnected', () => { log('Servidor caiu, reconectando…'); if(!peer.destroyed) try{ peer.reconnect(); }catch(e){} });
+    peer.on('error', e => {
+      log('Erro: '+e.type);
+      if(e.type==='peer-unavailable'){ h.onStatus('nohost'); later(connectHost, 4000); }
+      else if(['network','server-error','socket-error','socket-closed','unavailable-id'].includes(e.type)){ h.onStatus('noserver'); later(startPeer, 4000); }
+      else if(e.type==='browser-incompatible'){ h.onStatus('nolib'); }
+      else later(startPeer, 4000);
     });
-    peer.on('error', e => { if(e.type==='peer-unavailable') h.onStatus('nohost'); retry(); });
   };
-  start();
+  // 2) liga direto no aparelho do mestre
+  const connectHost = () => {
+    if(!peer || peer.destroyed || peer.disconnected){ return startPeer(); }
+    try{ conn && conn.close(); }catch(e){}
+    attempts++;
+    h.onStatus('linking'); log(`Ligando no mestre (tentativa ${attempts})…`);
+    const c = peer.connect(PREFIX+code, {reliable:true});
+    conn = c;
+    clearTimeout(linkTimer);
+    linkTimer = setTimeout(() => {           // negociação travou (rede bloqueando WebRTC)
+      if(conn===c && !c.open){ log('Tempo esgotado ligando no mestre.'); h.onStatus('stuck'); try{ c.close(); }catch(e){} later(connectHost, 1500); }
+    }, 15000);
+    c.on('open', () => { if(conn!==c) return; clearTimeout(linkTimer); attempts = 0; log('Conectado ao mestre!'); h.onStatus('open'); });
+    c.on('data', m => { if(conn===c) h.onMsg(m); });
+    c.on('close', () => { if(conn!==c) return; clearTimeout(linkTimer); log('Conexão com o mestre fechou.'); h.onStatus('retry'); later(connectHost, 2000); });
+    c.on('error', e => { if(conn!==c) return; log('Erro na conexão: '+(e && e.type || e)); });
+  };
+  startPeer();
   document.addEventListener('visibilitychange', () => {
-    if(!document.hidden && (!conn || !conn.open)){ clearTimeout(timer); timer=null; start(); }
+    if(document.hidden || (conn && conn.open)) return;
+    log('Voltou para o app, reconectando…');
+    if(!peer || peer.destroyed || peer.disconnected) startPeer(); else connectHost();
   });
   return { send(m){ if(conn && conn.open){ try{ conn.send(m); }catch(e){} } } };
 }
@@ -2782,7 +2813,14 @@ function startHost(code, saved){
     onError(msg){ hostUI.status = msg; render(); },
   });
   saveHost(); render();
+  keepAwake();
 }
+// impede o aparelho do mestre de apagar a tela (quando o navegador permite)
+let wakeLock = null;
+async function keepAwake(){
+  try{ if('wakeLock' in navigator && !document.hidden) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if(mode==='host' && !document.hidden) keepAwake(); });
 
 /* ================== JOGADOR ================== */
 let C = null, cnet = null;
@@ -2790,7 +2828,7 @@ function startPlayer(code, name){
   code = code.toUpperCase().trim(); name = name.trim().slice(0,16);
   const saved = pstore.get('resist-player');
   const cid = (saved && saved.code===code && saved.cid) || rid();
-  C = { code, name, cid, s:null, status:'connecting', err:'', seen:0,
+  C = { code, name, cid, s:null, status:'server', err:'', seen:0, log:[],
         ui:{tab:'game', showRole:false, kind:'accuse', target:'', } };
   pstore.set('resist-player', {code, name, cid});
   history.replaceState(null, '', '?sala=' + code + (LOCAL ? '&local=1' : ''));
@@ -2798,9 +2836,15 @@ function startPlayer(code, name){
   cnet = clientNet(code, {
     onStatus(st){
       C.status = st;
-      if(st==='open') cnet.send({t:'hello', name:C.name, cid:C.cid});
+      if(st==='open'){
+        cnet.send({t:'hello', name:C.name, cid:C.cid});
+        // se o mestre não responder, reenvia
+        clearTimeout(C.helloTimer);
+        C.helloTimer = setTimeout(()=>{ if(!C.s && C.status==='open'){ C.log.push('Mestre não respondeu, reenviando…'); cnet.send({t:'hello', name:C.name, cid:C.cid}); render(); } }, 6000);
+      }
       render();
     },
+    onLog(t){ const d=new Date(); C.log.push(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')} ${t}`); if(C.log.length>12) C.log.shift(); if(!C.s) render(); },
     onMsg(m){
       if(!m) return;
       if(m.t==='welcome'){ C.cid = m.cid; C.err=''; pstore.set('resist-player', {code:C.code, name:C.name, cid:C.cid}); }
@@ -2991,7 +3035,7 @@ function renderHost(){
 
   $app.innerHTML = `
   <div class="top">
-    <div><div class="mute small">Sala · Mestre</div><div class="code">${esc(H.code)}</div></div>
+    <div><div class="mute small">Sala · Mestre <span class="pill"><span class="dot ${hostUI.ready?'on':'off'}"></span>${hostUI.ready?'Sala online':'Abrindo sala…'}</span></div><div class="code">${esc(H.code)}</div></div>
     <div class="row">
       ${inGame ? `<button class="chip" data-a="h-roles">${hostUI.showRoles?'🙈 Esconder papéis':'👁️ Ver papéis'}</button>` : ''}
       <button class="chip ghost" data-a="h-close">Encerrar sala</button>
@@ -3011,6 +3055,7 @@ function renderHost(){
         ${qr ? `<div class="qr">${qr}</div>` : ''}
         <p class="link">${esc(url)}</p>
         <p class="small mute">Ou abra a página e digite o código <b>${esc(H.code)}</b></p>
+        <p class="small mute">Deixe esta tela aberta e acesa durante o jogo. Se o mestre trocar de aba ou bloquear o aparelho, a sala pausa.</p>
       </div>` : ''}
       <div class="card"><h3>Conversa</h3>${feedHTML(s, 40)}</div>
     </div>
@@ -3019,13 +3064,29 @@ function renderHost(){
 
 function renderPlayer(){
   const s = C.s;
-  const statusTxt = {connecting:'Conectando…', open:'Conectado', retry:'Reconectando…', nohost:'Sala não encontrada. O mestre está com a sala aberta?', nolib:'Este navegador bloqueou a conexão. Abra o link do jogo direto no Safari ou Chrome.'}[C.status] || '';
+  const statusTxt = {
+    server:'Conectando ao servidor de salas…',
+    linking:'Ligando no aparelho do mestre…',
+    open: s ? 'Conectado' : 'Conectado, aguardando o mestre…',
+    retry:'Reconectando…',
+    stuck:'A ligação com o mestre não completou. Tentando de novo…',
+    nohost:`Sala ${C.code} não encontrada.`,
+    noserver:'Sem acesso ao servidor de salas.',
+    nolib:'Este navegador bloqueou a conexão.',
+  }[C.status] || '';
+  const HINT = {
+    nohost:'Confira o código. A tela do mestre precisa estar aberta e acesa: se o mestre estiver no mesmo celular em outra aba, o navegador pausa a sala. Use dois aparelhos (ex.: mestre no PC, jogador no celular).',
+    stuck:'A rede pode estar bloqueando a ligação direta. Tente com o celular nos dados móveis ou os dois aparelhos no mesmo Wi-Fi.',
+    noserver:'Verifique a internet deste aparelho. Redes de empresa/escola às vezes bloqueiam.',
+    nolib:'Abra o link do jogo direto no Safari ou Chrome (não dentro de outro app).',
+  }[C.status];
   const connected = C.status==='open' && s;
   if(!s){
     $app.innerHTML = `
       <div class="top"><div><div class="mute small">Sala</div><div class="code">${esc(C.code)}</div></div>
       <button class="chip ghost" data-a="p-leave">Sair</button></div>
-      <div class="card" style="text-align:center"><p>${esc(statusTxt)}</p>${C.err?`<p class="err">${esc(C.err)}</p>`:''}</div>`;
+      <div class="card" style="text-align:center"><p style="font-size:18px">${esc(statusTxt)}</p>${HINT?`<p class="warn" style="text-align:left">${esc(HINT)}</p>`:''}${C.err?`<p class="err">${esc(C.err)}</p>`:''}</div>
+      <div class="card"><details ${C.status==='stuck'||C.status==='nohost'?'open':''}><summary>Detalhes da conexão</summary><pre class="small mute" style="white-space:pre-wrap;margin:8px 0 0">${esc(C.log.join('\n')) || '—'}</pre></details></div>`;
     return;
   }
   const me = s.me, others = s.players.filter(p=>p.cid!==me.cid);
