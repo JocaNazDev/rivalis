@@ -2370,11 +2370,11 @@ label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
 .rej{display:flex;gap:6px;justify-content:center;align-items:center;font-size:13px;color:var(--mute)}
 .rej i{width:14px;height:14px;border-radius:4px;border:1px solid var(--line);display:inline-block}
 .rej i.x{background:var(--warn);border-color:var(--warn)}
-.players{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.players{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:8px}
 .pl{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;align-items:center;gap:8px;min-height:50px;text-align:left;width:100%}
 .pl.sel{border-color:var(--gold);background:#3a3212}
 .pl.spy{box-shadow:inset 3px 0 0 var(--spy)} .pl.resr{box-shadow:inset 3px 0 0 var(--res)}
-.pl .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .role{border-radius:var(--r);padding:18px;text-align:center;cursor:pointer;user-select:none;border:1px solid var(--line)}
 .role.hid{background:repeating-linear-gradient(45deg,#1b1e27,#1b1e27 10px,#20242f 10px,#20242f 20px)}
 .role.R{background:linear-gradient(135deg,var(--res2),#0f172a);border-color:var(--res)}
@@ -2403,10 +2403,19 @@ label{font-size:13px;color:var(--mute);display:block;margin-bottom:4px}
 .switch{display:flex;align-items:center;gap:10px}
 details summary{cursor:pointer;color:var(--mute)}
 .link{word-break:break-all;font-size:13px;color:var(--mute)}
+.av{display:inline-block;line-height:0;flex:none}
+.av svg{display:block;border-radius:50%}
+.avgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin-top:10px}
+.avopt{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 3px;min-height:0;font-size:10px;line-height:1.15;color:var(--mute)}
+.avopt.on{border-color:var(--gold);background:#3a3212;color:var(--text)}
+.avopt svg{border-radius:50%}
+.avtabs{display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+.avtabs::-webkit-scrollbar{display:none}
 </style>
 </head>
 <body>
 <div id="app"></div>
+<script src="avatar.js"></script>
 <script>
 'use strict';
 /* ================== Utilidades ================== */
@@ -2426,6 +2435,56 @@ const rid = (n=10) => rnd(n,'abcdefghijkmnpqrstuvwxyz23456789');
 const newCode = () => rnd(4,'ABCDEFGHJKLMNPQRSTUVWXYZ');
 const shuffle = arr => { const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
 function joinUrl(code){ return location.origin + location.pathname + '?sala=' + code + (LOCAL ? '&local=1' : ''); }
+
+/* ================== Personagem (avatar.js) ================== */
+const HAS_AV = typeof Avatar !== 'undefined';
+const AVKEY = 'rivalis-avatar';
+const avLoad = () => { try{ return (LOCAL ? sessionStorage.getItem(AVKEY) : null) || localStorage.getItem(AVKEY) || ''; }catch(e){ return ''; } };
+const avSave = c => { try{ (LOCAL ? sessionStorage : localStorage).setItem(AVKEY, c); }catch(e){} };
+const avValid = c => typeof c === 'string' && /^\d{1,2}(-\d{1,2}){8}$/.test(c);
+const avFor = (code, name) => HAS_AV ? (avValid(code) ? code : Avatar.code(Avatar.fromString(name || 'x'))) : '';
+function avHTML(code, size){
+  if(!HAS_AV || !avValid(code)) return '';
+  try{ return `<span class="av" style="width:${size}px;height:${size}px">${Avatar.svg(Avatar.parse(code), {size})}</span>`; }
+  catch(e){ return ''; }
+}
+const AV = { code:'', tab:'face', open:false };
+if(HAS_AV) AV.code = avValid(avLoad()) ? avLoad() : Avatar.code(Avatar.random());
+
+function avEditorHTML(){
+  if(!HAS_AV) return '<p class="small mute">avatar.js não foi encontrado: coloque o arquivo na mesma pasta do jogo.</p>';
+  const cfg = Avatar.parse(AV.code), part = Avatar.PARTS[AV.tab];
+  const opts = part.color
+    ? part.list.map((o,i)=>`<button class="chip ${cfg[AV.tab]===i?'on':''}" data-a="a-pick" data-v="${i}" style="background:${o.c};color:#0b0d12;border-color:#00000055;font-weight:600">${esc(o.name)}</button>`).join('')
+    : part.list.map((o,i)=>`<button class="avopt ${cfg[AV.tab]===i?'on':''}" data-a="a-pick" data-v="${i}">${Avatar.svg(Object.assign({}, cfg, {[AV.tab]:i}), {size:52})}<span>${esc(o.name)}</span></button>`).join('');
+  return `<div class="card" style="margin:10px 0 0">
+    <div class="avtabs">${Avatar.KEYS.map(k=>`<button class="chip ${k===AV.tab?'on':''}" data-a="a-tab" data-v="${k}">${esc(Avatar.PARTS[k].name)}</button>`).join('')}</div>
+    <div class="${part.color?'row':'avgrid'}" style="margin-top:10px">${opts}</div>
+  </div>`;
+}
+function avPickerHTML(label){
+  if(!HAS_AV) return '';
+  return `<div><label>${esc(label)}</label>
+    <div class="row" style="align-items:center">
+      ${avHTML(AV.code, 76)}
+      <div class="col" style="flex:1;min-width:150px">
+        <button class="chip" data-a="a-rnd">🎲 Sortear personagem</button>
+        <button class="chip ${AV.open?'on':''}" data-a="a-open">${AV.open?'Pronto':'✏️ Personalizar'}</button>
+      </div>
+    </div>
+    ${AV.open ? avEditorHTML() : ''}</div>`;
+}
+const avAct = {
+  tab(v){ AV.tab = v; render(); },
+  open(){ AV.open = !AV.open; render(); },
+  rnd(){ setAvatar(Avatar.code(Avatar.random())); },
+  pick(v){ const cfg = Avatar.parse(AV.code); cfg[AV.tab] = +v; setAvatar(Avatar.code(cfg)); },
+};
+function setAvatar(code){
+  AV.code = code; avSave(code);
+  if(mode === 'player') send({t:'avatar', av:code});
+  render();
+}
 
 /* ================== Regras ================== */
 // Tamanho das equipes por missão e nº de espiões (tabela do jogo original; 3–4 = modo teste)
@@ -2591,7 +2650,7 @@ function pub(){
   const n = H.players.length;
   return {
     code:H.code, phase:H.phase, voteOn:H.voteOn,
-    players:H.players.map(p=>({cid:p.cid, name:p.name, on:online(p.cid)})),
+    players:H.players.map(p=>({cid:p.cid, name:p.name, on:online(p.cid), av:p.av || ''})),
     missions:H.missions, round:H.round, rejects:H.rejects, team:H.team,
     voted: H.phase==='vote' ? Object.keys(H.votes) : [],
     voteReveal:H.voteReveal,
@@ -2603,7 +2662,8 @@ function pub(){
 }
 function stateFor(cid){
   const s = pub(); const role = H.roles[cid] || null;
-  s.me = { cid, name:pname(cid), role,
+  const meP = H.players.find(p=>p.cid===cid) || {};
+  s.me = { cid, name:pname(cid), role, av: meP.av || '',
     spies: role==='S' ? H.players.filter(p=>H.roles[p.cid]==='S' && p.cid!==cid).map(p=>p.name) : [],
     ally: allyOf(cid),
     incoming: H.allyReqs.filter(r=>r.to===cid).map(r=>r.from),
@@ -2631,11 +2691,13 @@ function hello(key, m){
     if(H.players.length >= 10) return hnet.send(key, {t:'error', msg:'Sala cheia (máximo 10 jogadores).'});
     let nm = name, i = 2;
     while(H.players.some(q=>q.name.toLowerCase()===nm.toLowerCase())) nm = name+' '+(i++);
-    p = {cid:reqCid, name:nm}; H.players.push(p);
+    p = {cid:reqCid, name:nm, av:avFor(m.av, nm)}; H.players.push(p);
     sys(`👋 ${nm} entrou na sala.`);
   } else if(H.phase==='lobby' && p.name!==name && !H.players.some(q=>q!==p && q.name.toLowerCase()===name.toLowerCase())){
     p.name = name;
   }
+  if(avValid(m.av) && (H.phase === 'lobby' || !p.av)) p.av = m.av;
+  if(!p.av) p.av = avFor(null, p.name);
   const old = keyOf[p.cid];
   if(old && old!==key){ delete cidOf[old]; hnet.drop(old); }
   keyOf[p.cid] = key; cidOf[key] = p.cid;
@@ -2694,6 +2756,11 @@ function hostOnMsg(key, m){
       if(m.accept && !allyOf(cid) && !allyOf(m.from)) formAlliance(m.from, cid);
       else { H.allyReqs = H.allyReqs.filter(x=>x!==r); sys(`✋ ${pname(cid)} recusou a aliança com ${pname(m.from)}.`); }
       return sync();
+    }
+    case 'avatar': {
+      if(H.phase !== 'lobby' || !avValid(m.av)) return;
+      const p = H.players.find(p=>p.cid===cid); if(!p) return;
+      p.av = m.av; return sync();
     }
     case 'ally_cancel':
       H.allyReqs = H.allyReqs.filter(r=>r.from!==cid); return sync();
@@ -2837,10 +2904,10 @@ function startPlayer(code, name){
     onStatus(st){
       C.status = st;
       if(st==='open'){
-        cnet.send({t:'hello', name:C.name, cid:C.cid});
+        cnet.send({t:'hello', name:C.name, cid:C.cid, av:AV.code});
         // se o mestre não responder, reenvia
         clearTimeout(C.helloTimer);
-        C.helloTimer = setTimeout(()=>{ if(!C.s && C.status==='open'){ C.log.push('Mestre não respondeu, reenviando…'); cnet.send({t:'hello', name:C.name, cid:C.cid}); render(); } }, 6000);
+        C.helloTimer = setTimeout(()=>{ if(!C.s && C.status==='open'){ C.log.push('Mestre não respondeu, reenviando…'); cnet.send({t:'hello', name:C.name, cid:C.cid, av:AV.code}); render(); } }, 6000);
       }
       render();
     },
@@ -2899,7 +2966,11 @@ function render(){
   renderStart();
 }
 
+const startForm = {code:'', name:''};
 function renderStart(){
+  const jc = document.getElementById('jcode'), jn = document.getElementById('jname');
+  if(jc) startForm.code = jc.value;
+  if(jn) startForm.name = jn.value;
   const saved = store.get('resist-host');
   const sala = (Q.get('sala') || '').toUpperCase();
   const lastP = pstore.get('resist-player');
@@ -2911,8 +2982,9 @@ function renderStart(){
   <div class="grid2">
     <div class="card col">
       <h2>Entrar como jogador</h2>
-      <div><label for="jcode">Código da sala</label><input id="jcode" maxlength="4" autocapitalize="characters" autocomplete="off" value="${esc(sala || (lastP&&lastP.code) || '')}" placeholder="ABCD" style="text-transform:uppercase;letter-spacing:4px;font-weight:700"></div>
-      <div><label for="jname">Seu nome</label><input id="jname" maxlength="16" autocomplete="nickname" value="${esc((lastP&&lastP.name)||'')}" placeholder="Como te chamam"></div>
+      <div><label for="jcode">Código da sala</label><input id="jcode" maxlength="4" autocapitalize="characters" autocomplete="off" value="${esc(startForm.code || sala || (lastP&&lastP.code) || '')}" placeholder="ABCD" style="text-transform:uppercase;letter-spacing:4px;font-weight:700"></div>
+      <div><label for="jname">Seu nome</label><input id="jname" maxlength="16" autocomplete="nickname" value="${esc(startForm.name || (lastP&&lastP.name) || '')}" placeholder="Como te chamam"></div>
+      ${avPickerHTML('Seu personagem')}
       <button class="primary big" data-a="s-join">Entrar</button>
     </div>
     <div class="card col">
@@ -2948,12 +3020,13 @@ function trackHTML(s){
     <div class="rej">Rejeições: ${[0,1,2,3,4].map(i=>`<i class="${i<s.rejects?'x':''}"></i>`).join('')}</div>`;
 }
 function nameOf(s, cid){ const p = s.players.find(p=>p.cid===cid); return p ? p.name : '?'; }
+function avOf(s, cid){ const p = s.players.find(p=>p.cid===cid); return p ? p.av : ''; }
 function feedHTML(s, limit){
   const list = s.chat.slice().reverse().slice(0, limit||50);
   if(!list.length) return '<p class="mute small">Nenhuma mensagem ainda.</p>';
   return `<div class="feed">${list.map(c=> c.kind==='sys'
     ? `<div class="msg sys">${esc(c.text)}</div>`
-    : `<div class="msg ${c.kind}"><b>${esc(nameOf(s,c.from))}</b><span class="mute small">${KIND_LABEL[c.kind]||''}</span><div>${esc(c.text)}</div></div>`).join('')}</div>`;
+    : `<div class="msg ${c.kind}" style="display:flex;gap:8px;align-items:flex-start">${avHTML(avOf(s,c.from), 28)}<div><b>${esc(nameOf(s,c.from))}</b><span class="mute small">${KIND_LABEL[c.kind]||''}</span><div>${esc(c.text)}</div></div></div>`).join('')}</div>`;
 }
 function voteRevealHTML(s){
   const v = s.voteReveal; if(!v) return '';
@@ -2970,7 +3043,7 @@ function missionRevealHTML(s){
 function endHTML(s){
   return `<div class="banner ${s.winner}">${s.winner==='R'?'🛡️ A RESISTÊNCIA VENCEU':'🕵️ OS ESPIÕES VENCERAM'}</div>
     <p class="mute" style="text-align:center">${esc(s.winReason)}</p>
-    <div class="players" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${s.players.map(p=>`<div class="pl ${s.roles[p.cid]==='S'?'spy':'resr'}"><span class="nm">${esc(p.name)}</span><span>${s.roles[p.cid]==='S'?'🕵️ Espião':'🛡️ Resistência'}</span></div>`).join('')}</div>`;
+    <div class="players" style="margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">${s.players.map(p=>`<div class="pl ${s.roles[p.cid]==='S'?'spy':'resr'}">${avHTML(p.av,38)}<span class="nm">${esc(p.name)}</span><span>${s.roles[p.cid]==='S'?'🕵️':'🛡️'}</span></div>`).join('')}</div>`;
 }
 
 function renderHost(){
@@ -3027,7 +3100,7 @@ function renderHost(){
     const role = hostUI.showRoles && H.roles[p.cid];
     const ally = allyOf(p.cid);
     const cls = `pl ${sel?'sel':''} ${role==='S'?'spy':role==='R'?'resr':''}`;
-    const inner = `<span class="dot ${p.on?'on':'off'}"></span><span class="nm">${esc(p.name)}${ally?` <span class="small mute">🤝${esc(pname(ally))}</span>`:''}</span>${sel?'⭐':''}${role==='S'?'🕵️':''}`;
+    const inner = `${avHTML(p.av, 34)}<span class="dot ${p.on?'on':'off'}"></span><span class="nm">${esc(p.name)}${ally?`<br><span class="small mute">🤝${esc(pname(ally))}</span>`:''}</span>${sel?'⭐':''}${role==='S'?'🕵️':''}`;
     if(s.phase==='team') return `<button class="${cls}" data-a="h-team" data-v="${p.cid}">${inner}</button>`;
     if(s.phase==='lobby') return `<div class="${cls}">${inner}<button class="chip ghost" data-a="h-kick" data-v="${p.cid}" aria-label="Remover ${esc(p.name)}">✕</button></div>`;
     return `<div class="${cls}">${inner}</div>`;
@@ -3099,17 +3172,19 @@ function renderPlayer(){
   switch(s.phase){
     case 'lobby':
       phase = `<h3>Aguardando o mestre</h3><p>${s.players.length} jogadores na sala.</p>
-        <div class="players">${s.players.map(p=>`<div class="pl"><span class="dot ${p.on?'on':'off'}"></span><span class="nm">${esc(p.name)}${p.cid===me.cid?' (você)':''}</span></div>`).join('')}</div>`;
+        <div class="players">${s.players.map(p=>`<div class="pl">${avHTML(p.av,34)}<span class="dot ${p.on?'on':'off'}"></span><span class="nm">${esc(p.name)}${p.cid===me.cid?' (você)':''}</span></div>`).join('')}</div>
+        <div style="margin-top:12px">${avPickerHTML('Seu personagem')}</div>`;
       break;
     case 'team':
       phase = `<h3>Missão ${s.round+1}</h3><p>O mestre está escolhendo a equipe (${s.missions[s.round].size} pessoas)…</p>
-        ${s.team.length ? `<p class="mute">Até agora: ${s.team.map(c=>esc(nameOf(s,c))).join(', ')}</p>` : ''}
+        ${s.team.length ? `<div class="row">${s.team.map(c=>`<span class="pill" style="padding-left:3px">${avHTML(avOf(s,c),28)} ${esc(nameOf(s,c))}</span>`).join('')}</div>` : ''}
         <p class="small mute">Aproveite para conversar na aba Conversa.</p>`;
       break;
     case 'vote': {
       const ally = me.ally;
       phase = `<h3>Votação: missão ${s.round+1}</h3>
-        <p>Equipe proposta: <b>${s.team.map(c=>esc(nameOf(s,c))).join(', ')}</b>${onTeam?' <span class="pill">você está nela</span>':''}</p>
+        <p>Equipe proposta:${onTeam?' <span class="pill">você está nela</span>':''}</p>
+        <div class="row" style="margin-bottom:10px">${s.team.map(c=>`<span class="pill" style="padding-left:3px">${avHTML(avOf(s,c),28)} ${esc(nameOf(s,c))}</span>`).join('')}</div>
         ${me.voted
           ? `<p>Voto enviado: <b>${me.myVote==='A'?'✅ Aprovar':me.myVote==='R'?'❌ Rejeitar':'🔗 Seguir aliado'}</b></p><p class="mute">Aguardando ${s.players.length - s.voted.length} jogador(es)…</p>`
           : `<div class="col">
@@ -3188,7 +3263,7 @@ function renderPlayer(){
   const chatTab = `
     <div class="card col">
       <div class="row">${['accuse','defend','ally','say'].map(x=>`<button class="chip ${k===x?'on':''}" data-a="p-kind" data-v="${x}">${KIND_LABEL[x]}</button>`).join('')}</div>
-      ${needsTarget ? `<div><label>Jogador</label><div class="row">${others.map(p=>`<button class="chip ${C.ui.target===p.cid?'on':''}" data-a="p-target" data-v="${p.cid}">${esc(p.name)}</button>`).join('') || '<span class="mute small">Ninguém mais na sala.</span>'}</div></div>` : ''}
+      ${needsTarget ? `<div><label>Jogador</label><div class="row">${others.map(p=>`<button class="chip ${C.ui.target===p.cid?'on':''}" data-a="p-target" data-v="${p.cid}" style="padding-left:4px">${avHTML(p.av,26)} ${esc(p.name)}</button>`).join('') || '<span class="mute small">Ninguém mais na sala.</span>'}</div></div>` : ''}
       ${composer}
       ${C.ui.flash ? `<p style="color:var(--ok)">${esc(C.ui.flash)}</p>` : ''}
     </div>
@@ -3196,7 +3271,7 @@ function renderPlayer(){
 
   $app.innerHTML = `
     <div class="top">
-      <div><div class="mute small">Sala ${esc(C.code)}</div><h2 style="margin:0">${esc(me.name)}</h2></div>
+      <div class="row" style="gap:10px">${avHTML(me.av, 44)}<div><div class="mute small">Sala ${esc(C.code)}</div><h2 style="margin:0">${esc(me.name)}</h2></div></div>
       <div class="row"><span class="pill"><span class="dot ${connected?'on':'off'}"></span>${esc(statusTxt)}</span><button class="chip ghost" data-a="p-leave">Sair</button></div>
     </div>
     ${C.err ? `<div class="err" style="margin-bottom:12px">${esc(C.err)}</div>` : ''}
@@ -3212,6 +3287,7 @@ const ACTIONS = {};
 for(const [k,f] of Object.entries(hostAct)) ACTIONS['h-'+k] = f;
 for(const [k,f] of Object.entries(playerAct)) ACTIONS['p-'+k] = f;
 for(const [k,f] of Object.entries(startAct)) ACTIONS['s-'+k] = f;
+for(const [k,f] of Object.entries(avAct)) ACTIONS['a-'+k] = f;
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]');
   if(!b || b.disabled) return;
